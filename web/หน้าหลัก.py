@@ -8,7 +8,7 @@ import streamlit as st
 import style
 from db import safe_query
 
-st.set_page_config(page_title="ความนิยมคณะ มก.", page_icon="🌾", layout="wide")
+st.set_page_config(page_title="ความนิยมคณะ มก.", page_icon="🌾", layout="wide", initial_sidebar_state="collapsed")
 style.apply()
 
 # ---------------------------------------------------------------- ข้อมูล (อ่านจาก PostgreSQL โดยตรง)
@@ -66,25 +66,35 @@ def year_frame(df_tcas: pd.DataFrame, df_names: pd.DataFrame, year: int) -> pd.D
     return df
 
 
-# ---------------------------------------------------------------- ตัวกรอง
+# ---------------------------------------------------------------- ส่วนหัว + ตัวกรอง (แถวเดียวด้านบน)
 FILTER_KEYS = ["f_year", "f_campus", "f_fac", "f_level", "f_score", "f_q"]
-with st.sidebar:
-    st.markdown("### 🔎 ตัวกรอง")
-    if st.button("↺ ล้างตัวกรองทั้งหมด", use_container_width=True):
-        for k in FILTER_KEYS:
-            st.session_state.pop(k, None)
-        st.rerun()
-    year = st.radio("ปีการศึกษา (TCAS รอบ 3)", years, horizontal=True, key="f_year")
+
+
+def reset_filters():
+    for k in FILTER_KEYS:
+        st.session_state.pop(k, None)
+
+
+updated = pd.to_datetime(last_run["finished_at"].iloc[0]).tz_convert("Asia/Bangkok").strftime("%d/%m/%Y %H:%M") \
+    if not last_run.empty else "-"
+style.topbar("เรียนอะไรดีที่ ม.เกษตรศาสตร์?", "ความนิยม การแข่งขัน และคะแนนเข้า ระดับปริญญาตรี ทุกวิทยาเขต",
+             f"ที่มา: ทปอ. TCAS รอบ 3 ปี 2567–2569 · สป.อว. นักศึกษาใหม่ 2567<br>admission.ku.ac.th ที่นั่ง TCAS70 · อัปเดต {updated}")
+
+with st.container(border=True):
+    f1, f2, f3, f4, f5 = st.columns([1.7, 1.1, 1.4, 1.2, 1.5], gap="small")
+    year = f1.radio("ปีการศึกษา", years, horizontal=True, key="f_year")
     base = year_frame(tcas, names, int(year))
-    campus = st.multiselect("วิทยาเขต", sorted(base["campus"].dropna().unique()), key="f_campus",
+    campus = f2.multiselect("วิทยาเขต", sorted(base["campus"].dropna().unique()), key="f_campus",
                             placeholder="ทุกวิทยาเขต")
     fac_pool = base[base["campus"].isin(campus)] if campus else base
-    faculty = st.multiselect("คณะ", sorted(fac_pool["faculty"].dropna().unique()), key="f_fac", placeholder="ทุกคณะ")
-    level = st.multiselect("ระดับการแข่งขัน", LEVEL_NAMES, key="f_level", placeholder="ทุกระดับ",
+    faculty = f3.multiselect("คณะ", sorted(fac_pool["faculty"].dropna().unique()), key="f_fac", placeholder="ทุกคณะ")
+    level = f4.multiselect("ระดับการแข่งขัน", LEVEL_NAMES, key="f_level", placeholder="ทุกระดับ",
                            help="ผู้สมัครต่อ 1 ที่นั่ง: สูงมาก ≥ 20 · สูง 10–20 · ปานกลาง 5–10 · ไม่สูง < 5")
-    score = st.slider("คะแนนต่ำสุดที่ใช้เข้า (ช่วง)", 0, 100, (0, 100), key="f_score")
-    q = st.text_input("ค้นหาชื่อหลักสูตร", key="f_q", placeholder="เช่น คอมพิวเตอร์ บัญชี สัตวแพทย์")
-    st.caption("ตัวกรองทุกตัวมีผลกับทุกแท็บ")
+    q = f5.text_input("ค้นหาหลักสูตร", key="f_q", placeholder="เช่น คอมพิวเตอร์ บัญชี สัตวแพทย์")
+    g1, g2 = st.columns([4, 1.2])
+    score = g1.slider("ช่วงคะแนนต่ำสุดที่ใช้เข้า", 0, 100, (0, 100), key="f_score")
+    g2.write("")
+    g2.button("ล้างตัวกรอง", on_click=reset_filters, use_container_width=True)
 
 view = base.copy()
 if campus:
@@ -98,21 +108,6 @@ if score != (0, 100):
 if q:
     view = view[view["program_name"].fillna("").str.contains(q.strip(), case=False)]
 
-# ---------------------------------------------------------------- ส่วนหัว
-updated = pd.to_datetime(last_run["finished_at"].iloc[0]).tz_convert("Asia/Bangkok").strftime("%d/%m/%Y %H:%M") \
-    if not last_run.empty else "-"
-st.markdown(f"""
-<div class="hero">
-  <h1>🌾 เรียนอะไรดีที่ ม.เกษตรศาสตร์?</h1>
-  <p>ดูว่าหลักสูตรไหนคนสมัครเยอะ แข่งขันสูงแค่ไหน และต้องใช้คะแนนเท่าไร — ระดับปริญญาตรี ทุกวิทยาเขต</p>
-  <div class="chips">
-    <span class="chip">ทปอ. สถิติ TCAS รอบ 3 ปี 2567–2569</span>
-    <span class="chip">สป.อว. นักศึกษาใหม่ 2567</span>
-    <span class="chip">admission.ku.ac.th ที่นั่ง TCAS70</span>
-    <span class="chip">อัปเดตล่าสุด {updated}</span>
-  </div>
-</div>""", unsafe_allow_html=True)
-
 if view.empty:
     st.warning("ไม่พบหลักสูตรที่ตรงกับตัวกรอง ลองล้างตัวกรองบางตัวดูครับ")
     st.stop()
@@ -120,14 +115,14 @@ if view.empty:
 k1, k2, k3, k4 = st.columns(4)
 ratio_all = view["applicants"].sum() / view["seats"].sum() if view["seats"].sum() else 0
 style.kpi(k1, "หลักสูตรที่ตรงตัวกรอง", f"{len(view):,}", f"ปีการศึกษา {year} · รอบ 3 Admission")
-style.kpi(k2, "ผู้สมัครทั้งหมด", f"{int(view['applicants'].sum()):,} คน", "นับรายการสมัครในรอบ 3")
-style.kpi(k3, "ที่นั่งที่เปิดรับ", f"{int(view['seats'].sum()):,} ที่", "จำนวนรับในรอบ 3")
+style.kpi(k2, "ผู้สมัครทั้งหมด", f"{int(view['applicants'].sum()):,}", "รายการสมัครในรอบ 3")
+style.kpi(k3, "ที่นั่งที่เปิดรับ", f"{int(view['seats'].sum()):,}", "จำนวนรับในรอบ 3")
 style.kpi(k4, "อัตราการแข่งขัน", f"1 : {ratio_all:.1f}", "1 ที่นั่ง มีคนสมัครกี่คน")
 st.write("")
 
 
 def themed(chart, height):
-    return chart.properties(height=height).configure(font="Sarabun, sans-serif").configure_view(strokeWidth=0).configure_axis(
+    return chart.properties(height=height).configure(font="IBM Plex Sans Thai, sans-serif").configure_view(strokeWidth=0).configure_axis(
         labelColor=style.INK_2, titleColor=style.INK_2, gridColor=style.GRID, domain=False, tickColor=style.GRID,
         labelFontSize=12, titleFontSize=12, labelLimit=260,
     ).configure_legend(labelColor=style.INK, titleColor=style.INK_2, labelFontSize=12, orient="top")
@@ -149,52 +144,47 @@ TIP = [alt.Tooltip("name:N", title="หลักสูตร"), alt.Tooltip("fac
        alt.Tooltip("seats:Q", title="ที่นั่ง", format=","), alt.Tooltip("ratio:Q", title="ผู้สมัคร/ที่นั่ง", format=".1f"),
        alt.Tooltip("min_score:Q", title="คะแนนต่ำสุด", format=".2f")]
 
-tab1, tab2, tab3, tab4 = st.tabs(["📊 ภาพรวม", "🏛️ เปรียบเทียบคณะ", "🎯 หาหลักสูตรที่ใช่", "📋 ตารางข้อมูล"])
+tab1, tab2, tab3, tab4 = st.tabs(["ภาพรวม", "เปรียบเทียบคณะ", "หาหลักสูตรที่ใช่", "ตารางข้อมูล"])
 
 # ---------------------------------------------------------------- แท็บ 1: ภาพรวม
 with tab1:
-    left, right = st.columns([2, 1], gap="large")
-    with left:
-        st.markdown("#### อันดับหลักสูตร")
-        rank_by = st.radio("จัดอันดับตาม", ["คนสมัครมากที่สุด", "แข่งขันสูงที่สุด", "คะแนนต่ำสุดสูงที่สุด",
-                                          "แข่งขันน้อย (โอกาสติดสูง)"], horizontal=True, label_visibility="collapsed")
-        top_n = st.slider("จำนวนอันดับ", 5, 20, 10, key="top_n")
-        spec = {
-            "คนสมัครมากที่สุด": ("applicants", False, "จำนวนผู้สมัคร (คน)", ","),
-            "แข่งขันสูงที่สุด": ("ratio", False, "ผู้สมัครต่อ 1 ที่นั่ง", ".1f"),
-            "คะแนนต่ำสุดสูงที่สุด": ("min_score", False, "คะแนนต่ำสุดที่ผ่านการคัดเลือก", ".2f"),
-            "แข่งขันน้อย (โอกาสติดสูง)": ("ratio", True, "ผู้สมัครต่อ 1 ที่นั่ง", ".1f"),
+    left, right = st.columns([2, 1], gap="medium")
+    with left, st.container(border=True):
+        rank_by = st.radio("จัดอันดับตาม", ["คนสมัครมาก", "แข่งขันสูง", "คะแนนสูง", "โอกาสติดสูง"], horizontal=True)
+        col, asc, unit, fmt, color = {
+            "คนสมัครมาก": ("applicants", False, "คนสมัคร", "{:,.0f}", style.BLUE),
+            "แข่งขันสูง": ("ratio", False, "ผู้สมัครต่อ 1 ที่นั่ง", "1 : {:.1f}", style.BLUE),
+            "คะแนนสูง": ("min_score", False, "คะแนนต่ำสุด", "{:.2f}", style.BLUE),
+            "โอกาสติดสูง": ("ratio", True, "ผู้สมัครต่อ 1 ที่นั่ง (น้อย = ติดง่าย)", "1 : {:.1f}", style.AQUA),
         }[rank_by]
-        col, asc, title, fmt = spec
+        top_n = 10
         top = view.dropna(subset=[col]).sort_values(col, ascending=asc).head(top_n)
-        if asc:
-            top = top.assign(**{col: top[col]})
-            chart = alt.Chart(top).mark_bar(cornerRadiusEnd=4, size=18, color=style.AQUA).encode(
-                x=alt.X(f"{col}:Q", title=title, scale=alt.Scale(domain=[0, float(top[col].max() or 1) * 1.15], nice=False)),
-                y=alt.Y("label:N", sort="x", title=None), tooltip=TIP)
-            chart = themed(chart + chart.mark_text(align="left", dx=4, color=style.INK).encode(
-                text=alt.Text(f"{col}:Q", format=fmt)), max(160, 30 * len(top)))
-        else:
-            chart = hbar(top, col, "label", title, fmt, tooltip=TIP)
-        st.altair_chart(chart, use_container_width=True)
-        st.markdown('<div class="howto">💡 วางเมาส์บนแท่งเพื่อดูรายละเอียด · "แข่งขันน้อย" คือหลักสูตรที่ผู้สมัครต่อที่นั่งน้อย '
-                    'มีโอกาสติดสูงกว่า</div>', unsafe_allow_html=True)
-    with right:
+        st.markdown(f"#### {top_n} อันดับหลักสูตร — {rank_by}")
+        mx = float(top[col].max() or 1)
+        rows = "".join(
+            f'<div class="rank" title="{r.program_name} · {r.faculty} · ผู้สมัคร {r.applicants:,.0f} · ที่นั่ง {r.seats:,.0f}">'
+            f'<span class="n">{i}</span><span class="nm">{r["name"]} <small>· {r.campus}</small></span>'
+            f'<div class="track"><div class="bar" style="width:{max(2, r[col] / mx * 100):.1f}%;background:{color}"></div></div>'
+            f'<span class="v">{fmt.format(r[col])}</span></div>'
+            for i, (_, r) in enumerate(top.iterrows(), start=1))
+        st.markdown(rows, unsafe_allow_html=True)
+        st.markdown(f'<div class="howto">หน่วย: {unit} · วางเมาส์บนแถวเพื่อดูคณะ จำนวนผู้สมัคร และที่นั่ง</div>',
+                    unsafe_allow_html=True)
+    with right, st.container(border=True):
         st.markdown("#### ระดับการแข่งขัน")
-        lv = view.dropna(subset=["level"]).groupby("level", as_index=False).size()
-        lv["order"] = lv["level"].map(LEVEL_NAMES.index)
-        donut = alt.Chart(lv).mark_arc(innerRadius=62, stroke="#fff", strokeWidth=2).encode(
-            theta="size:Q",
-            color=alt.Color("level:N", scale=alt.Scale(domain=LEVEL_NAMES, range=LEVEL_COLORS), legend=None),
-            order="order:Q", tooltip=[alt.Tooltip("level:N", title="ระดับ"), alt.Tooltip("size:Q", title="หลักสูตร")])
-        st.altair_chart(themed(donut, 230), use_container_width=True)
-        for (name, lo, hi), color in zip(LEVELS, LEVEL_COLORS):
-            n = int(lv.loc[lv["level"] == name, "size"].sum())
-            rng = f"≥ {lo}" if hi == math.inf else f"{lo}–{hi}"
-            st.markdown(f'<div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0">'
-                        f'<span><span class="level" style="background:{color};color:#fff">{name}</span> '
-                        f'<span style="color:#5b625e;font-size:.85rem">{rng} คน/ที่นั่ง</span></span>'
-                        f'<b>{n} หลักสูตร</b></div>', unsafe_allow_html=True)
+        lv = view.dropna(subset=["level"]).groupby("level")["label"].count()
+        total = int(lv.sum()) or 1
+        st.markdown(f'<div class="howto">{total} หลักสูตร แบ่งตามจำนวนผู้สมัครต่อ 1 ที่นั่ง</div>', unsafe_allow_html=True)
+        segs = "".join(f'<div style="width:{lv.get(n, 0) / total * 100:.1f}%;background:{c}"></div>'
+                       for n, c in zip(LEVEL_NAMES, LEVEL_COLORS) if lv.get(n, 0))
+        items = "".join(
+            f'<div class="lvl"><div style="display:flex;align-items:center"><span class="sw" style="background:{c}"></span>'
+            f'<div><div class="nm">{n}</div><div class="r">{("≥ " + str(lo)) if hi == math.inf else (f"{lo}–{hi}" if lo else "น้อยกว่า " + str(hi))} คน ต่อ 1 ที่นั่ง</div></div></div>'
+            f'<b>{int(lv.get(n, 0))} หลักสูตร</b></div>'
+            for (n, lo, hi), c in zip(LEVELS, LEVEL_COLORS))
+        st.markdown(f'<div class="stack">{segs}</div>{items}'
+                    '<div class="note">อ่านค่า: 1 : 20 แปลว่า 1 ที่นั่งมีคนสมัคร 20 คน ยิ่งตัวเลขมาก ยิ่งแข่งขันสูง</div>',
+                    unsafe_allow_html=True)
 
 # ---------------------------------------------------------------- แท็บ 2: เปรียบเทียบคณะ
 with tab2:

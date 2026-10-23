@@ -31,7 +31,13 @@ docker compose up -d --build  # ครั้งแรก build image ประ�
 - Dashboard: http://localhost:8501 (หน้า "สถานะ Pipeline" อยู่ในเมนูด้านซ้าย)
 - PostgreSQL ปลายทาง: `localhost:${TARGET_DB_PORT}` (ค่าเริ่มต้น 5434)
 
+ทดสอบกรณีแหล่งข้อมูลล่ม (ระดับ 3): ใน Airflow ไปที่ Admin → Variables เพิ่ม `kupop_simulate_down` = `mhesi`
+(หรือ `tcas`, `kuadm`, คั่นด้วย comma) แล้ว Trigger DAG จะเห็น task ของแหล่งนั้นเป็นสีแดง แต่ DAG ยังรวมข้อมูลจากแหล่งที่เหลือ
+และหน้า "สถานะ Pipeline" แสดงรอบนั้นเป็น `partial` (ลบ Variable ออกเพื่อกลับเป็นปกติ)
+
 หยุดระบบ: `docker compose down` (ลบข้อมูลทั้งหมดด้วย `docker compose down -v`)
+
+ไฟล์สรุป: [`docs/22_6621655231_summary.pdf`](docs/22_6621655231_summary.pdf)
 
 ## โครงสร้าง
 ```

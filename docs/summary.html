@@ -26,6 +26,60 @@
 </style>
 </head>
 <body>
-<!--CONTENT-->
+
+<h1>ความนิยมและคะแนนเข้าคณะ ป.ตรี ม.เกษตรศาสตร์</h1>
+<div class="meta">ข้อสอบปลายภาค 02739452 · นายณัฐภัทร ยืนยง รหัส 6621655231 หมู่ 820 ลำดับที่ 22<br>
+GitHub: <b>https://github.com/Catboyz-45/02739452-22-6621655231</b> (public) · รัน: <code>cp .env.example .env && docker compose up -d --build</code> → Airflow :8080 · Dashboard :8501</div>
+
+<h2>1. ภาพรวมงาน — ทำได้ครบระดับ 1, 2, 3 และโบนัสทั้งสองแบบ</h2>
+<table>
+<tr><th style="width:12%">แหล่ง</th><th style="width:30%">วิธีดึง</th><th>ข้อมูลที่ได้ (เฉพาะ มก.)</th><th style="width:10%">แถว</th></tr>
+<tr><td>1. ทปอ.</td><td><b>Web scraping</b> หน้า mytcas.com/stat (BeautifulSoup) หาลิงก์ไฟล์ แล้วดาวน์โหลด Excel</td><td>สถิติ TCAS รอบ 3 ปี 2567–2569: จำนวนรับ ผู้สมัคร คะแนนต่ำสุด/สูงสุด</td><td>1,017</td></tr>
+<tr><td>2. สป.อว.</td><td>CKAN API ของ data.go.th หาลิงก์ไฟล์ → ดาวน์โหลด CSV</td><td>นักศึกษาเข้าใหม่ ป.ตรี 2567 (รวมยอดที่แยกเพศให้เป็นยอดต่อหลักสูตร)</td><td>182</td></tr>
+<tr><td>3. admission.ku.ac.th</td><td><b>Web scraping</b> ตาราง HTML 19 โครงการ ด้วย Dynamic Task Mapping</td><td>จำนวนรับ TCAS70 แยกโครงการ/สาขา</td><td>762</td></tr>
+</table>
+<ul>
+<li><b>ระดับ 1:</b> DAG extract → transform → load ลง PostgreSQL และ dashboard (Streamlit) อ่านจาก PostgreSQL โดยตรง แสดงตาราง + กราฟ</li>
+<li><b>ระดับ 2:</b> 3 แหล่งรันขนานกันใน TaskGroup <code>extract</code> แปลงเป็น schema เดียว (<code>admission_stats</code>) ใช้ <b>UPSERT</b> คีย์ (source, academic_year, source_record_id) — trigger ซ้ำแล้วยังได้ 1,917 แถวเท่าเดิม · dashboard มี KPI 5 ตัว + ตัวกรองวิทยาเขต/คณะ/ชื่อหลักสูตร/จำนวนแหล่ง</li>
+<li><b>ระดับ 3:</b> <code>merge_and_transform</code> ใช้ <code>trigger_rule=all_done</code> แหล่งไหนล่มก็รวมจากแหล่งที่เหลือ (ทดสอบจริงด้วย Variable <code>kupop_simulate_down=mhesi</code> ได้สถานะ partial โหลด 1,735 แถว) ·
+<b>ตัดซ้ำข้ามแหล่ง</b>: จับคู่หลักสูตรด้วย วิทยาเขต + <code>major_key</code> รวม 1,917 แถว เหลือ <b>264 หลักสูตร</b> (พบ ≥2 แหล่ง 214, ครบ 3 แหล่ง 136) ·
+<b>ตรวจคุณภาพ</b> แล้วแยกเส้นทางด้วย Branch: ผ่านทั้งหมด → load, มีแถวเสีย → <code>quarantine_bad_rows</code> แล้ว load, ข้อมูล &lt;100 แถว → <code>alert_insufficient_data</code> ไม่โหลดทับข้อมูลเดิม</li>
+<li><b>โบนัส:</b> Dynamic Task Mapping (<code>extract_kuadm_project.expand()</code> 19 task) และหน้า "สถานะ Pipeline" บนเว็บ (อ่านจากตาราง <code>pipeline_runs</code>, <code>dq_quarantine</code>)</li>
+<li>ไม่ใช้ Selenium, ตรวจ robots.txt ทุกเว็บ (data.mhesi.go.th ห้าม <code>/api/</code> จึงใช้ API ของ data.go.th แทน), เป็นข้อมูลสถิติรวม ไม่มีข้อมูลส่วนบุคคล</li>
+</ul>
+<div class="fig"><div style="height:150px;overflow:hidden"><img src="img/graph.png"></div><div class="cap">ภาพที่ 1 Graph view ของ DAG <code>ku_faculty_popularity</code> (กาง TaskGroup extract)</div></div>
+
+<div class="two page-break">
+<div><img src="img/grid.png"><div class="cap">ภาพที่ 2 Grid view — รอบ <code>demo_source_outage_mhesi</code> จำลองแหล่ง อว. ล่ม: extract_mhesi สีแดง แต่ task ถัดไปยังรันต่อ และโหลดจาก 2 แหล่งที่เหลือ</div></div>
+<div><div style="height:262px;overflow:hidden"><img src="img/status.png"></div><div class="cap">ภาพที่ 3 หน้าสถานะ Pipeline (โบนัส): สถานะแต่ละแหล่ง, ผลตัดซ้ำ, ประวัติการรัน (มีรอบ partial)</div></div>
+</div>
+<div class="fig"><div style="height:640px;overflow:hidden"><img src="img/dashboard.png"></div><div class="cap">ภาพที่ 4 Dashboard (Streamlit อ่านจาก PostgreSQL): KPI 5 ตัว, ตัวกรองด้านซ้าย, Top 15 อัตราการแข่งขัน, ผู้สมัครแยกคณะ 3 ปี (ด้านล่างยังมีกราฟแนวโน้มคะแนนต่ำสุด, ผู้สมัคร vs เข้าเรียนจริง และตารางหลักสูตร)</div></div>
+
+<h2 class="page-break">2. ปัญหาที่พบและวิธีแก้</h2>
+<table>
+<tr><th style="width:16%">ปัญหา</th><th style="width:28%">อาการ</th><th style="width:26%">วิธีหาสาเหตุ</th><th>วิธีแก้</th></tr>
+<tr><td>1. ดิสก์เต็มระหว่าง build image Airflow</td><td><code>docker compose up --build</code> ล้มด้วย <i>commit failed: input/output error</i> จากนั้น Docker daemon ล่ม และทุกคำสั่งขึ้น <i>ENOSPC</i></td><td><code>df -h</code> เหลือ 0 B, <code>du -sh</code> พบ Docker.raw ใช้ 30 GB, <code>docker system df</code> มี image ที่ไม่ได้ใช้ 7.9 GB</td><td>ล้าง cache ที่สร้างใหม่ได้ (Homebrew/npm/Xcode) + <code>docker image prune -a</code> + <code>builder prune</code> คืนพื้นที่ 10.6 GB แล้ว build ใหม่ผ่าน · ใช้ LocalExecutor (ไม่มี Redis/Celery) และ image เดียวร่วมกันเพื่อลดขนาด</td></tr>
+<tr><td>2. Excel ของ ทปอ. แต่ละปีโครงสร้างไม่เหมือนกัน</td><td>ปี 68 มีคอลัมน์ "คะแนนต่ำสุด ประมวลผลครั้งที่ 1/2", ปี 69 มี "คะแนนต่ำสุด DS" และ "รหัสโครงการ" เพิ่ม · UPSERT ทับกันเพราะรหัสหลักสูตรซ้ำ</td><td>เปิด header ของทุกไฟล์เทียบกัน และนับรหัสหลักสูตรซ้ำ (ปี 69 ซ้ำ 56 รหัส)</td><td>เลือกคอลัมน์ด้วย keyword ตัด DS ใช้ผลประมวลผลรอบสุดท้าย · <code>source_record_id</code> = รหัสหลักสูตร|รายละเอียด|วิชาเอก|รหัสโครงการ</td></tr>
+<tr><td>3. ชื่อหลักสูตรไม่ตรงกันข้ามแหล่ง</td><td>"น.บ.(นิติศาสตรบัณฑิต)" ของ ทปอ. ไม่จับคู่กับ "นิติศาสตร์" ของ อว. หลักสูตรจึงแยกเป็น 2 แถว</td><td>กรองตารางสรุปหาแถวที่ <code>n_sources = 1</code> แต่ชื่อคล้ายกัน</td><td><code>major_key</code>: ใช้ข้อความหลัง "สาขาวิชา" หรือชื่อปริญญาในวงเล็บ ตัด "บัณฑิต" ช่องว่าง และไม้ทัณฑฆาต → หลักสูตรที่พบ ≥2 แหล่งเพิ่มเป็น 214</td></tr>
+<tr><td>4. ช่องจำนวนรับไม่ใช่ตัวเลข</td><td>44 แถวของ admission.ku เขียนว่า "*จำนวนรับรวมกับเงื่อนไขอื่น"</td><td>ดู reason ในตาราง <code>dq_quarantine</code> แล้วเปิด HTML ของหน้าโครงการ 8</td><td>กฎ DQ "ต้องมีจำนวนรับ" แยกไป <code>quarantine_bad_rows</code> ไม่นำมานับ เพื่อกันนับที่นั่งซ้ำ</td></tr>
+</table>
+
+<h2>3. การวางแผนและจัดลำดับงาน</h2>
+<table>
+<tr><th style="width:17%">เวลา</th><th>งาน</th></tr>
+<tr><td>13:00–13:55</td><td>อ่านโจทย์ แตกเป็น checklist ตามระดับ · สำรวจแหล่งจริงก่อนจอง (ตรวจ robots.txt, ดูว่าเป็น HTML ธรรมดาหรือ JavaScript, นับจำนวนแถว) · เทียบ 3 หัวข้อ แล้วเลือกหัวข้อที่ทั้ง 3 แหล่งเป็น "เรื่องเดียวกัน" จริง → จองในไลน์</td></tr>
+<tr><td>14:00–14:10</td><td>สร้าง repo ตามชื่อที่กำหนด แล้ว push commit แรกทันที (กันพลาดเรื่อง commit ก่อน 16:00) · เขียน extract 3 แหล่งและทดสอบกับเว็บจริงนอก Docker ก่อน เพื่อลดเวลา debug ใน Airflow</td></tr>
+<tr><td>14:10–14:35</td><td>เขียน transform / DQ / UPSERT / dashboard ระหว่างแก้ปัญหา Docker และดิสก์เต็ม</td></tr>
+<tr><td>14:35–14:45</td><td>รัน DAG จริง, trigger ซ้ำเพื่อพิสูจน์ UPSERT, จำลองแหล่งล่ม, แคปหน้าจอ</td></tr>
+<tr><td>14:45–15:30</td><td>เขียน PDF/README · เผื่อเวลา 30 นาทีท้ายไว้ clone repo ใหม่มารันทดสอบ แล้วส่งงาน</td></tr>
+</table>
+<p><b>ลำดับความสำคัญ:</b> ทำระดับ 1 ให้ครบทั้งเส้นก่อน แล้วค่อยเพิ่มระดับ 2 → 3 → โบนัส · งานที่ <b>ตัดออก</b> และเหตุผล:</p>
+<ul>
+<li><b>ข้อมูลตลาดงาน (JobThai/JobBKK):</b> น่าสนใจ แต่ไม่ใช่ "เรื่องเดียวกัน" กับข้อมูลรับเข้า และต้องทำตาราง mapping สาขาไปเป็นอาชีพเอง เสี่ยงทั้งคะแนนและเวลา</li>
+<li><b>สถิติของสำนักบริหารการศึกษา มก.:</b> เป็น Power BI ฝังในหน้าเว็บ ต้องใช้ browser automation ซึ่งโจทย์ห้าม (Selenium) · ม.บูรพาที่มีหน้าสถิติก็ถูกตัด เพราะ robots.txt ตั้ง <code>Disallow: /</code></li>
+<li><b>TCAS ย้อนหลังปี 61–66 และข้อมูล อว. ปี 2563–2564:</b> รูปแบบคอลัมน์ต่างกันมากขึ้น ใช้ 3 ปีก็พอเห็นแนวโน้มแล้ว จึงเก็บไว้เป็นงานต่อยอด</li>
+<li><b>เว็บรับสมัครของวิทยาเขตอื่น:</b> admission.ku.ac.th แสดงบางเขนเป็นหลัก แต่ข้อมูลวิทยาเขตอื่นยังได้จาก ทปอ. และ อว. ครบ</li>
+</ul>
+
 </body>
 </html>

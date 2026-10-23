@@ -50,6 +50,9 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; font-weight: 700 !important; }
 [data-testid="stTabs"] button[role="tab"][aria-selected="true"] { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
 [data-testid="stTabs"] button[role="tab"] p { font-size: .95rem; font-weight: 600; }
 [data-testid="stTabs"] [data-baseweb="tab-highlight"], [data-testid="stTabs"] [data-baseweb="tab-border"] { display: none; }
+/* แถบเลื่อน: ซ่อนตัวเลข min/max ที่ซ้ำ และใช้ฟอนต์เดียวกับทั้งหน้า */
+[data-testid="stSliderTickBarMin"], [data-testid="stSliderTickBarMax"] { display: none; }
+[data-testid="stSliderThumbValue"], [data-testid="stSliderThumbValue"] * { font-family: 'IBM Plex Sans Thai', sans-serif !important; font-size: .82rem; }
 /* ตัวเลือกแบบ pill (ตามดีไซน์) */
 div[role="radiogroup"] { gap: 6px !important; flex-wrap: wrap; }
 div[role="radiogroup"] > label { border: 1px solid #d7dcd4; border-radius: 999px; padding: 4px 14px !important;
@@ -64,7 +67,9 @@ div[role="radiogroup"] > label:has(input:checked) p { color: #00704a; font-weigh
 .tbl td { padding: 9px 10px; border-bottom: 1px solid #f0f2ee; color: #1c2420; }
 .tbl, .tbl tr, .tbl th, .tbl td { border-left: 0 !important; border-right: 0 !important; border-top: 0 !important; }
 .tbl { border: 0 !important; }
-.tbl .num { text-align: right; } .tbl .muted { color: #5d665f; } .tbl .pos { color: #00704a; font-weight: 600; }
+.tbl th { white-space: nowrap; }
+.tbl td.muted { white-space: nowrap; }
+.tbl .num { text-align: right; white-space: nowrap; } .tbl .muted { color: #5d665f; } .tbl .pos { color: #00704a; font-weight: 600; }
 .tbl .b { font-weight: 600; }
 .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .8rem; color: #4a524c; margin: 0 0 6px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
@@ -117,7 +122,7 @@ def bar_rows(items, color=BLUE) -> str:
 def table(df, num=(), muted=(), pos=(), bold=()) -> str:
     def cls(c):
         return " ".join(k for k, group in (("num", num), ("muted", muted), ("pos", pos), ("b", bold)) if c in group)
-    head = "".join(f'<th class="{cls(c)}">{esc(c)}</th>' for c in df.columns)
+    head = "".join(f'<th class="{"num" if c in num else ""}">{esc(c)}</th>' for c in df.columns)
     body = "".join("<tr>" + "".join(f'<td class="{cls(c)}">{esc(v)}</td>' for c, v in row.items()) + "</tr>"
                    for _, row in df.iterrows())
     return f'<div class="tblwrap"><table class="tbl"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'

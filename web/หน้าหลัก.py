@@ -70,9 +70,14 @@ def year_frame(df_tcas: pd.DataFrame, df_names: pd.DataFrame, year: int) -> pd.D
 FILTER_KEYS = ["f_year", "f_campus", "f_fac", "f_level", "f_score", "f_q"]
 
 
+DEFAULTS = {"f_year": years[0], "f_campus": [], "f_fac": [], "f_level": [], "f_score": (0, 100), "f_q": ""}
+for _k, _v in DEFAULTS.items():
+    st.session_state.setdefault(_k, _v)
+
+
 def reset_filters():
-    for k in FILTER_KEYS:
-        st.session_state.pop(k, None)
+    # ตั้งค่ากลับเป็นค่าเริ่มต้นตรง ๆ (ถ้าแค่ลบ key ช่องค้นหาจะยังจำข้อความเดิมไว้)
+    st.session_state.update(DEFAULTS)
 
 
 updated = pd.to_datetime(last_run["finished_at"].iloc[0]).tz_convert("Asia/Bangkok").strftime("%d/%m/%Y %H:%M") \
@@ -92,7 +97,7 @@ with st.container(border=True):
                            help="ผู้สมัครต่อ 1 ที่นั่ง: สูงมาก ≥ 20 · สูง 10–20 · ปานกลาง 5–10 · ไม่สูง < 5")
     q = f5.text_input("ค้นหาหลักสูตร", key="f_q", placeholder="เช่น คอมพิวเตอร์ บัญชี สัตวแพทย์")
     g1, g2 = st.columns([4, 1.2])
-    score = g1.slider("ช่วงคะแนนต่ำสุดที่ใช้เข้า", 0, 100, (0, 100), key="f_score")
+    score = g1.slider("ช่วงคะแนนต่ำสุดที่ใช้เข้า", 0, 100, key="f_score")
     g2.write("")
     g2.button("ล้างตัวกรอง", on_click=reset_filters, use_container_width=True)
 
@@ -122,7 +127,7 @@ st.write("")
 
 
 def themed(chart, height):
-    return chart.properties(height=height).configure(font="IBM Plex Sans Thai, sans-serif").configure_view(strokeWidth=0).configure_axis(
+    return chart.properties(height=height).configure(font="IBM Plex Sans Thai, sans-serif", background="#ffffff").configure_view(strokeWidth=0).configure_axis(
         labelColor=style.INK_2, titleColor=style.INK_2, gridColor=style.GRID, domain=False, tickColor=style.GRID,
         labelFontSize=12, titleFontSize=12, labelLimit=260,
     ).configure_legend(labelColor=style.INK, titleColor=style.INK_2, labelFontSize=12, orient="top")
@@ -159,7 +164,7 @@ with tab1:
         }[rank_by]
         top_n = 10
         top = view.dropna(subset=[col]).sort_values(col, ascending=asc).head(top_n)
-        st.markdown(f"#### {top_n} อันดับหลักสูตร — {rank_by}")
+        st.markdown(f"#### {len(top)} อันดับหลักสูตร — {rank_by}")
         mx = float(top[col].max() or 1)
         rows = "".join(
             f'<div class="rank" title="{r.program_name} · {r.faculty} · ผู้สมัคร {r.applicants:,.0f} · ที่นั่ง {r.seats:,.0f}">'
@@ -316,6 +321,7 @@ with tab3:
                 st.markdown('<div class="howto">ยังไม่พบประกาศบน admission.ku.ac.th</div>', unsafe_allow_html=True)
             else:
                 seats70["project"] = seats70["project"].str.replace("โครงการ ", "", regex=False)
+                seats70["seats"] = seats70["seats"].fillna(0).astype(int).map("{:,}".format)
                 st.markdown(style.table(seats70.rename(columns={"project": "โครงการ", "seats": "ที่นั่ง"}),
                                         num=("ที่นั่ง",), bold=("ที่นั่ง",)), unsafe_allow_html=True)
 

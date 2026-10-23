@@ -188,117 +188,140 @@ with tab1:
 
 # ---------------------------------------------------------------- แท็บ 2: เปรียบเทียบคณะ
 with tab2:
-    metric = st.radio("เปรียบเทียบด้วย", ["ผู้สมัคร", "ที่นั่ง", "อัตราการแข่งขัน", "คะแนนต่ำสุดเฉลี่ย"], horizontal=True)
-    by_fac = view.groupby("fac", as_index=False).agg(applicants=("applicants", "sum"), seats=("seats", "sum"),
-                                                      min_score=("min_score", "mean"), n=("label", "count"))
-    by_fac["ratio"] = by_fac["applicants"] / by_fac["seats"]
-    col, title, fmt = {"ผู้สมัคร": ("applicants", "ผู้สมัคร (คน)", ","), "ที่นั่ง": ("seats", "ที่นั่ง", ","),
-                       "อัตราการแข่งขัน": ("ratio", "ผู้สมัครต่อ 1 ที่นั่ง", ".1f"),
-                       "คะแนนต่ำสุดเฉลี่ย": ("min_score", "คะแนนต่ำสุดเฉลี่ย", ".1f")}[metric]
-    show_all = st.toggle("แสดงทุกคณะ (ค่าเริ่มต้นแสดง 12 อันดับแรก)", value=False)
-    fac_plot = by_fac.dropna(subset=[col]).sort_values(col, ascending=False)
-    fac_plot = fac_plot if show_all else fac_plot.head(12)
-    st.markdown(f"#### {metric} แยกตามคณะ (ปี {year})")
-    st.altair_chart(hbar(fac_plot, col, "fac", title, fmt,
-                         tooltip=[alt.Tooltip("fac:N", title="คณะ"), alt.Tooltip(f"{col}:Q", title=metric, format=fmt),
-                                  alt.Tooltip("n:Q", title="จำนวนหลักสูตร")]), use_container_width=True)
+    with st.container(border=True):
+        metric = st.radio("เปรียบเทียบด้วย", ["ผู้สมัคร", "ที่นั่ง", "อัตราการแข่งขัน", "คะแนนต่ำสุดเฉลี่ย"],
+                          horizontal=True, key="m_fac")
+        by_fac = view.groupby("fac", as_index=False).agg(applicants=("applicants", "sum"), seats=("seats", "sum"),
+                                                          min_score=("min_score", "mean"), n=("label", "count"))
+        by_fac["ratio"] = by_fac["applicants"] / by_fac["seats"]
+        col, fmt = {"ผู้สมัคร": ("applicants", "{:,.0f}"), "ที่นั่ง": ("seats", "{:,.0f}"),
+                    "อัตราการแข่งขัน": ("ratio", "1 : {:.1f}"), "คะแนนต่ำสุดเฉลี่ย": ("min_score", "{:.1f}")}[metric]
+        show_all = st.toggle("แสดงทุกคณะ", value=False, key="fac_all")
+        fp = by_fac.dropna(subset=[col]).sort_values(col, ascending=False)
+        fp = fp if show_all else fp.head(12)
+        style.title(f"{metric} แยกตามคณะ — ปี {year}",
+                    f"{len(by_fac)} คณะ" + ("" if show_all else " · แสดง 12 อันดับแรก"))
+        mx = float(fp[col].max() or 1)
+        st.markdown(style.bar_rows([{
+            "n": i, "name": r["fac"], "sub": f"· {int(r['n'])} หลักสูตร", "value": fmt.format(r[col]),
+            "pct": r[col] / mx * 100, "title": f"ผู้สมัคร {r['applicants']:,.0f} · ที่นั่ง {r['seats']:,.0f}"}
+            for i, (_, r) in enumerate(fp.iterrows(), start=1)]), unsafe_allow_html=True)
 
-    c1, c2 = st.columns(2, gap="large")
-    with c1:
-        st.markdown("#### แนวโน้มผู้สมัคร 3 ปี")
+    c1, c2 = st.columns(2, gap="medium")
+    with c1, st.container(border=True):
+        style.title("แนวโน้มผู้สมัคร 3 ปี", "เลือกได้สูงสุด 5 คณะ")
         keys = view[["campus", "major_key"]].drop_duplicates()
         hist = tcas.merge(keys, on=["campus", "major_key"]).merge(names[["campus", "major_key", "faculty"]],
                                                                     on=["campus", "major_key"], suffixes=("_x", ""))
         hist["fac"] = hist["faculty"].map(short_fac)
         trend = hist.groupby(["fac", "academic_year"], as_index=False)["applicants"].sum()
+        trend["academic_year"] = trend["academic_year"].astype(int)
         default = trend.groupby("fac")["applicants"].sum().nlargest(3).index.tolist()
-        picks = st.multiselect("เลือกคณะ (สูงสุด 5)", sorted(trend["fac"].unique()), default=default, max_selections=5)
+        picks = st.multiselect("คณะ", sorted(trend["fac"].unique()), default=default, max_selections=5,
+                               label_visibility="collapsed")
         tr = trend[trend["fac"].isin(picks)]
         line = alt.Chart(tr).mark_line(strokeWidth=2, point=alt.OverlayMarkDef(size=70, filled=True)).encode(
-            x=alt.X("academic_year:O", title="ปีการศึกษา", axis=alt.Axis(labelAngle=0)),
-            y=alt.Y("applicants:Q", title="ผู้สมัคร (คน)"),
+            x=alt.X("academic_year:O", title=None, axis=alt.Axis(labelAngle=0)),
+            y=alt.Y("applicants:Q", title=None),
             color=alt.Color("fac:N", scale=alt.Scale(domain=picks, range=style.SERIES[:len(picks)]), title=None),
             tooltip=[alt.Tooltip("fac:N", title="คณะ"), alt.Tooltip("academic_year:O", title="ปี"),
                      alt.Tooltip("applicants:Q", title="ผู้สมัคร", format=",")])
-        st.altair_chart(themed(line, 300), use_container_width=True)
-    with c2:
-        st.markdown("#### สมัคร vs เข้าเรียนจริง (ปี 2567)")
+        st.altair_chart(themed(line, 290), use_container_width=True)
+    with c2, st.container(border=True):
+        style.title("สมัคร vs เข้าเรียนจริง — ปี 2567", "8 คณะที่มีนักศึกษาใหม่มากที่สุด")
         sub = view.dropna(subset=["enrolled_2567"])
-        keys67 = sub[["campus", "major_key", "fac"]]
-        app67 = tcas[tcas["academic_year"] == 2567].merge(keys67, on=["campus", "major_key"]) \
-            .groupby("fac")["applicants"].sum().rename("ผู้สมัครรอบ 3 (ทปอ.)")
-        enr67 = sub.groupby("fac")["enrolled_2567"].sum().rename("นักศึกษาใหม่ทุกรอบ (อว.)")
-        comp = pd.concat([app67, enr67], axis=1).dropna().nlargest(8, "นักศึกษาใหม่ทุกรอบ (อว.)").reset_index() \
-            .melt(id_vars="fac", var_name="ชุดข้อมูล", value_name="คน")
-        series = ["ผู้สมัครรอบ 3 (ทปอ.)", "นักศึกษาใหม่ทุกรอบ (อว.)"]
-        gb = alt.Chart(comp).mark_bar(cornerRadiusEnd=4, size=11).encode(
-            y=alt.Y("fac:N", title=None, sort=alt.EncodingSortField("คน", op="max", order="descending")),
-            yOffset=alt.YOffset("ชุดข้อมูล:N", sort=series),
-            x=alt.X("คน:Q", title="คน"),
-            color=alt.Color("ชุดข้อมูล:N", scale=alt.Scale(domain=series, range=[style.BLUE, style.ORANGE]), title=None),
-            tooltip=["fac", "ชุดข้อมูล", alt.Tooltip("คน:Q", format=",")])
-        st.altair_chart(themed(gb, 300), use_container_width=True)
-        st.markdown('<div class="howto">💡 1 คนสมัครได้หลายหลักสูตร ยอดสมัครจึงสูงกว่ายอดที่เข้าเรียนจริงมาก</div>',
+        app67 = tcas[tcas["academic_year"] == 2567].merge(sub[["campus", "major_key", "fac"]], on=["campus", "major_key"]) \
+            .groupby("fac")["applicants"].sum()
+        enr67 = sub.groupby("fac")["enrolled_2567"].sum()
+        comp = pd.concat([app67.rename("app"), enr67.rename("enr")], axis=1).dropna().nlargest(8, "enr")
+        mx2 = float(comp["app"].max() or 1)
+        html = (f'<div class="legend"><span><i style="background:{style.BLUE}"></i>ผู้สมัครรอบ 3 (ทปอ.)</span>'
+                f'<span><i style="background:{style.ORANGE}"></i>นักศึกษาใหม่ทุกรอบ (อว.)</span></div>')
+        for fac, r in comp.iterrows():
+            html += (f'<div class="pair"><span class="nm">{style.esc(fac)}</span><div>'
+                     f'<div class="row"><div class="track" style="background:#eef1ec;border-radius:6px;height:10px">'
+                     f'<div style="height:10px;border-radius:0 6px 6px 0;background:{style.BLUE};width:{r.app / mx2 * 100:.1f}%"></div></div>'
+                     f'<span class="v">{r.app:,.0f}</span></div>'
+                     f'<div class="row"><div class="track" style="background:#eef1ec;border-radius:6px;height:10px">'
+                     f'<div style="height:10px;border-radius:0 6px 6px 0;background:{style.ORANGE};width:{max(1, r.enr / mx2 * 100):.1f}%"></div></div>'
+                     f'<span class="v">{r.enr:,.0f}</span></div></div></div>')
+        st.markdown(html + '<div class="note">1 คนสมัครได้หลายหลักสูตร ยอดสมัครจึงสูงกว่ายอดเข้าเรียนจริงมาก</div>',
                     unsafe_allow_html=True)
 
 # ---------------------------------------------------------------- แท็บ 3: หาหลักสูตรที่ใช่
 with tab3:
-    a, b = st.columns([1.1, 1], gap="large")
-    with a:
-        st.markdown("#### คะแนนของฉันพอเข้าหลักสูตรไหนได้บ้าง?")
-        my = st.number_input("คะแนนรวมของฉัน (เต็ม 100)", 0.0, 100.0, 60.0, 0.5)
-        fit = view.dropna(subset=["min_score"]).copy()
-        fit = fit[fit["min_score"] <= my].sort_values("min_score", ascending=False)
-        fit["เผื่อ"] = (my - fit["min_score"]).round(2)
-        st.markdown(f"มี **{len(fit):,}** หลักสูตรที่คะแนนต่ำสุดปี {year} ไม่เกิน {my:g} คะแนน")
-        st.dataframe(fit[["label", "min_score", "เผื่อ", "level"]].head(30).rename(columns={
-            "label": "หลักสูตร · วิทยาเขต", "min_score": "คะแนนต่ำสุด", "level": "การแข่งขัน"}),
-            hide_index=True, use_container_width=True, height=360,
-            column_config={"คะแนนต่ำสุด": st.column_config.NumberColumn(format="%.2f"),
-                           "เผื่อ": st.column_config.NumberColumn("คะแนนเผื่อ", format="+%.2f")})
-        st.caption("⚠️ แต่ละหลักสูตรใช้วิชาและสัดส่วนคะแนนต่างกัน ใช้เป็นแนวทางเบื้องต้นเท่านั้น")
-    with b:
-        st.markdown("#### ดูรายละเอียดหลักสูตร")
+    with st.container(border=True):
+        a, b = st.columns([1, 1.7], gap="large")
+        with a:
+            st.markdown("#### คะแนนของฉันพอเข้าที่ไหนได้บ้าง?")
+            my = st.number_input("คะแนนรวมของฉัน (เต็ม 100)", 0.0, 100.0, 60.0, 0.5)
+            fit = view.dropna(subset=["min_score"]).copy()
+            fit = fit[fit["min_score"] <= my].sort_values("min_score", ascending=False)
+            st.markdown(f"มี **{len(fit):,}** หลักสูตรที่คะแนนต่ำสุดปี {year} ไม่เกิน {my:g} คะแนน")
+            st.markdown('<div class="howto">แต่ละหลักสูตรใช้วิชาและสัดส่วนคะแนนต่างกัน ใช้เป็นแนวทางเบื้องต้นเท่านั้น</div>',
+                        unsafe_allow_html=True)
+        with b:
+            show = pd.DataFrame({
+                "หลักสูตร": fit["name"], "วิทยาเขต": fit["campus"],
+                "คะแนนต่ำสุด": fit["min_score"].map("{:.2f}".format),
+                "เผื่อ": (my - fit["min_score"]).map("+{:.2f}".format),
+                "การแข่งขัน": fit["level"].fillna("-")}).head(30)
+            st.markdown(style.table(show, num=("คะแนนต่ำสุด", "เผื่อ"), muted=("วิทยาเขต", "การแข่งขัน"),
+                                    pos=("เผื่อ",), bold=("คะแนนต่ำสุด",)), unsafe_allow_html=True)
+
+    with st.container(border=True):
+        st.markdown("#### รายละเอียดรายหลักสูตร")
         opts = view.sort_values("applicants", ascending=False)
         pick = st.selectbox("เลือกหลักสูตร (พิมพ์ค้นหาได้)", opts["label"].tolist())
         row = opts[opts["label"] == pick].iloc[0]
-        srcs = "".join(f'<span class="badge">{s}</span>' for s in str(row["sources"] or "").split(",") if s)
-        st.markdown(f"**{row['program_name']}**  \n{row['faculty']} · วิทยาเขต{row['campus']}  \nพบในแหล่งข้อมูล: {srcs}",
+        srcs = "".join(f'<span class="badge">{x}</span>' for x in str(row["sources"] or "").split(",") if x)
+        st.markdown(f'<div style="margin:2px 0 10px"><b>{style.esc(row["program_name"])}</b><br>'
+                    f'<span style="color:#5d665f;font-size:.88rem">{style.esc(row["faculty"])} · วิทยาเขต{row["campus"]}</span>'
+                    f'<br><span style="font-size:.82rem;color:#5d665f">พบในแหล่งข้อมูล:</span> {srcs}</div>',
                     unsafe_allow_html=True)
-        m1, m2, m3, m4 = st.columns(4)
+        m1, m2, m3, m4, m5 = st.columns(5)
         style.kpi(m1, "ผู้สมัคร", f"{int(row['applicants']):,}", f"ปี {year}", small=True)
-        style.kpi(m2, "ที่นั่ง", f"{int(row['seats']):,}", "รอบ 3", small=True)
-        style.kpi(m3, "แข่งขัน", f"1 : {row['ratio']:.1f}" if pd.notna(row["ratio"]) else "-", row["level"] or "", small=True)
+        style.kpi(m2, "ที่นั่งรอบ 3", f"{int(row['seats']):,}", "จำนวนรับ", small=True)
+        style.kpi(m3, "การแข่งขัน", f"1 : {row['ratio']:.1f}" if pd.notna(row["ratio"]) else "-", row["level"] or "", small=True)
         style.kpi(m4, "คะแนนต่ำสุด", f"{row['min_score']:.2f}" if pd.notna(row["min_score"]) else "-",
                   f"สูงสุด {row['max_score']:.2f}" if pd.notna(row["max_score"]) else "", small=True)
+        style.kpi(m5, "เข้าใหม่ 2567", f"{int(row['enrolled_2567']):,}" if pd.notna(row["enrolled_2567"]) else "-",
+                  "ข้อมูล อว.", small=True)
         hist1 = tcas[(tcas["campus"] == row["campus"]) & (tcas["major_key"] == row["major_key"])] \
             .groupby("academic_year", as_index=False).agg(applicants=("applicants", "sum"), min_score=("min_score", "min"))
         hist1["academic_year"] = hist1["academic_year"].astype(int)
-        s1, s2 = st.columns(2)
-        with s1:
-            bars = alt.Chart(hist1).mark_bar(cornerRadiusEnd=4, size=26).encode(
-                x=alt.X("academic_year:O", title="ปี", axis=alt.Axis(labelAngle=0)),
-                y=alt.Y("applicants:Q", title="ผู้สมัคร"),
-                color=alt.Color("academic_year:O", scale=alt.Scale(domain=list(style.YEAR_RAMP),
-                                                                   range=list(style.YEAR_RAMP.values())), legend=None),
-                tooltip=[alt.Tooltip("academic_year:O", title="ปี"), alt.Tooltip("applicants:Q", title="ผู้สมัคร", format=",")])
-            st.altair_chart(themed(bars, 200), use_container_width=True)
-        with s2:
-            ln = alt.Chart(hist1.dropna(subset=["min_score"])).mark_line(
-                strokeWidth=2, color=style.ORANGE, point=alt.OverlayMarkDef(size=70, filled=True, color=style.ORANGE)).encode(
-                x=alt.X("academic_year:O", title="ปี", axis=alt.Axis(labelAngle=0)),
-                y=alt.Y("min_score:Q", title="คะแนนต่ำสุด", scale=alt.Scale(zero=False)),
-                tooltip=[alt.Tooltip("academic_year:O", title="ปี"), alt.Tooltip("min_score:Q", title="คะแนนต่ำสุด", format=".2f")])
-            st.altair_chart(themed(ln, 200), use_container_width=True)
-        seats70 = stats[(stats["source"] == "kuadm") & (stats["campus"] == row["campus"])
-                        & (stats["major_key"] == row["major_key"])].groupby("project", as_index=False)["seats"].sum()
-        if not seats70.empty:
-            st.markdown(f"**ที่นั่ง TCAS70 ที่ประกาศแล้ว** (admission.ku.ac.th) รวม {int(seats70['seats'].sum()):,} ที่")
-            st.dataframe(seats70.rename(columns={"project": "โครงการ", "seats": "ที่นั่ง"}), hide_index=True,
-                         use_container_width=True)
+        st.write("")
+        y1, y2, y3 = st.columns(3, gap="large")
+        with y1:
+            st.markdown("**ผู้สมัครย้อนหลัง**")
+            amx = float(hist1["applicants"].max() or 1)
+            st.markdown("".join(
+                f'<div class="yr"><span>{r.academic_year}</span><div class="track" style="background:#eef1ec;border-radius:6px;height:14px">'
+                f'<div style="height:14px;border-radius:0 6px 6px 0;width:{r.applicants / amx * 100:.1f}%;'
+                f'background:{style.YEAR_RAMP.get(r.academic_year, style.BLUE)}"></div></div>'
+                f'<span class="v" style="text-align:right;font-weight:600">{r.applicants:,.0f}</span></div>'
+                for r in hist1.itertuples()), unsafe_allow_html=True)
+        with y2:
+            st.markdown("**คะแนนต่ำสุดย้อนหลัง**")
+            st.markdown("".join(
+                f'<div class="yr"><span>{r.academic_year}</span><div class="track" style="background:#eef1ec;border-radius:6px;height:14px">'
+                f'<div style="height:14px;border-radius:0 6px 6px 0;width:{(r.min_score or 0):.1f}%;background:{style.ORANGE}"></div></div>'
+                f'<span class="v" style="text-align:right;font-weight:600">{r.min_score:.2f}</span></div>'
+                for r in hist1.dropna(subset=["min_score"]).itertuples()), unsafe_allow_html=True)
+        with y3:
+            st.markdown("**ที่นั่ง TCAS70 ที่ประกาศแล้ว**")
+            seats70 = stats[(stats["source"] == "kuadm") & (stats["campus"] == row["campus"])
+                            & (stats["major_key"] == row["major_key"])].groupby("project", as_index=False)["seats"].sum()
+            if seats70.empty:
+                st.markdown('<div class="howto">ยังไม่พบประกาศบน admission.ku.ac.th</div>', unsafe_allow_html=True)
+            else:
+                seats70["project"] = seats70["project"].str.replace("โครงการ ", "", regex=False)
+                st.markdown(style.table(seats70.rename(columns={"project": "โครงการ", "seats": "ที่นั่ง"}),
+                                        num=("ที่นั่ง",), bold=("ที่นั่ง",)), unsafe_allow_html=True)
 
 # ---------------------------------------------------------------- แท็บ 4: ตาราง
-with tab4:
+with tab4, st.container(border=True):
+    style.title("ตารางหลักสูตรทั้งหมด", f"{len(view):,} หลักสูตรตามตัวกรอง · ปี {year} · คลิกหัวคอลัมน์เพื่อเรียงลำดับ")
     table = view.sort_values("applicants", ascending=False)[
         ["name", "faculty", "campus", "applicants", "seats", "ratio", "level", "min_score", "max_score",
          "enrolled_2567", "seats_2570", "sources"]].rename(columns={
@@ -311,10 +334,9 @@ with tab4:
         "คะแนนต่ำสุด": st.column_config.NumberColumn(format="%.2f"),
         "คะแนนสูงสุด": st.column_config.NumberColumn(format="%.2f"),
     })
-    st.download_button("⬇️ ดาวน์โหลดตารางนี้ (CSV)", table.to_csv(index=False).encode("utf-8-sig"),
-                       f"ku_programs_{year}.csv")
+    st.download_button("ดาวน์โหลดตารางนี้ (CSV)", table.to_csv(index=False).encode("utf-8-sig"), f"ku_programs_{year}.csv")
 
-with st.expander("📖 คำอธิบายคำศัพท์และที่มาของข้อมูล"):
+with st.expander("คำอธิบายคำศัพท์และที่มาของข้อมูล"):
     st.markdown("""
 - **ผู้สมัคร / ที่นั่ง** — สถิติ TCAS รอบ 3 (Admission) จาก ทปอ. นับรายการสมัคร (1 คนเลือกได้หลายอันดับ)
 - **อัตราการแข่งขัน** — ผู้สมัครหารด้วยที่นั่ง เช่น 1 : 20 แปลว่า 1 ที่นั่งมีคนสมัคร 20 คน

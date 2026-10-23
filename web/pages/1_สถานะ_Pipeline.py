@@ -6,54 +6,69 @@ import streamlit as st
 import style
 from db import safe_query
 
-st.set_page_config(page_title="สถานะ Pipeline", page_icon="🛠️", layout="wide")
+st.set_page_config(page_title="สถานะ Pipeline", page_icon="🛠️", layout="wide", initial_sidebar_state="collapsed")
 style.apply()
-st.markdown('<div class="hero"><h1>🛠️ สถานะ Pipeline</h1><p>ผลการรัน DAG <code style="color:#fff;background:transparent">ku_faculty_popularity</code> '
-            'ล่าสุด สถานะของแต่ละแหล่งข้อมูล และแถวที่ไม่ผ่านการตรวจคุณภาพ</p></div>', unsafe_allow_html=True)
 
 runs, err = safe_query("SELECT * FROM pipeline_runs ORDER BY started_at DESC LIMIT 30")
+style.topbar("สถานะ Pipeline", "ผลการรัน DAG ku_faculty_popularity สถานะของแต่ละแหล่งข้อมูล และแถวที่ไม่ผ่านการตรวจคุณภาพ",
+             "Airflow: http://localhost:8080")
 if err or runs.empty:
     st.info("ยังไม่มีประวัติการรัน DAG")
     st.stop()
 
 last = runs.iloc[0]
-icon = {"success": "🟢", "partial": "🟡", "no_load": "🔴"}.get(last["status"], "⚪")
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("รอบล่าสุด", f"{icon} {last['status']}")
-c2.metric("แถวที่โหลด (UPSERT)", f"{int(last['rows_loaded'] or 0):,}")
-c3.metric("แถวที่ถูกกักไว้ (DQ)", f"{int(last['rows_quarantined'] or 0):,}")
-c4.metric("เส้นทางหลังตรวจคุณภาพ", last["dq_branch"] or "-")
-
 details = last["details"] if isinstance(last["details"], dict) else json.loads(last["details"] or "{}")
-st.subheader("สถานะแต่ละแหล่งข้อมูล (รอบล่าสุด)")
-labels = {"tcas": "ทปอ. สถิติ TCAS รอบ 3", "mhesi": "สป.อว. นักศึกษาเข้าใหม่", "kuadm": "admission.ku.ac.th"}
-per_source = (details.get("info") or {}).get("rows_per_source", {})
-ok = set((last["sources_ok"] or "").split(","))
-st.dataframe(pd.DataFrame([
-    {"แหล่ง": labels[s], "สถานะ": "✅ สำเร็จ" if s in ok else "❌ ล้มเหลว", "แถวที่ดึงได้": per_source.get(s, 0)}
-    for s in labels
-]), hide_index=True, use_container_width=True)
+STATUS = {"success": ("#1baf7a", "สำเร็จ"), "partial": ("#eda100", "สำเร็จบางแหล่ง"), "no_load": ("#e34948", "ไม่ได้โหลด")}
+color, label = STATUS.get(last["status"], ("#9aa19c", last["status"]))
+when = pd.to_datetime(last["finished_at"]).tz_convert("Asia/Bangkok").strftime("%d/%m/%Y %H:%M")
 
+k1, k2, k3, k4 = st.columns(4)
+style.kpi(k1, "รอบล่าสุด", f'<span class="dot" style="background:{color};width:14px;height:14px"></span>{label}',
+          f"เสร็จเมื่อ {when}")
+style.kpi(k2, "แถวที่โหลด (UPSERT)", f"{int(last['rows_loaded'] or 0):,}", f"ดึงมาทั้งหมด {int(last['rows_extracted'] or 0):,} แถว")
+style.kpi(k3, "แถวที่ถูกกักไว้", f"{int(last['rows_quarantined'] or 0):,}", "ไม่ผ่านการตรวจคุณภาพ")
 summary = details.get("summary") or {}
-if summary:
-    st.write(f"ตัดซ้ำข้ามแหล่ง: รวม **{summary.get('source_rows_merged', 0):,}** แถวจากทุกแหล่ง เหลือ "
-             f"**{summary.get('programs', 0):,}** หลักสูตร (พบมากกว่า 1 แหล่ง {summary.get('programs_multi_source', 0):,} หลักสูตร)")
+style.kpi(k4, "หลักสูตรหลังตัดซ้ำ", f"{summary.get('programs', 0):,}",
+          f"พบมากกว่า 1 แหล่ง {summary.get('programs_multi_source', 0):,} หลักสูตร")
+st.write("")
 
-st.subheader("ประวัติการรัน")
-show = runs[["run_id", "started_at", "finished_at", "status", "dq_branch", "sources_ok", "sources_failed",
-             "rows_extracted", "rows_loaded", "rows_quarantined"]]
-st.dataframe(show, hide_index=True, use_container_width=True)
+left, right = st.columns([1, 1.4], gap="medium")
+with left, st.container(border=True):
+    style.title("แหล่งข้อมูล (รอบล่าสุด)", f"เส้นทางหลังตรวจคุณภาพ: {last['dq_branch'] or '-'}")
+    labels = {"tcas": "ทปอ. สถิติ TCAS รอบ 3", "mhesi": "สป.อว. นักศึกษาเข้าใหม่", "kuadm": "admission.ku.ac.th"}
+    per_source = (details.get("info") or {}).get("rows_per_source", {})
+    ok = set((last["sources_ok"] or "").split(","))
+    st.markdown("".join(
+        f'<div class="lvl"><div style="display:flex;align-items:center">'
+        f'<span class="dot" style="background:{"#1baf7a" if s in ok else "#e34948"}"></span>'
+        f'<div><div class="nm">{name}</div><div class="r">{"ดึงสำเร็จ" if s in ok else "ดึงไม่สำเร็จ"}</div></div></div>'
+        f'<b>{per_source.get(s, 0):,} แถว</b></div>' for s, name in labels.items()), unsafe_allow_html=True)
+    st.markdown('<div class="note">ถ้าแหล่งใดล่ม DAG ยังรวมข้อมูลจากแหล่งที่เหลือ และรอบนั้นจะมีสถานะ "สำเร็จบางแหล่ง"</div>',
+                unsafe_allow_html=True)
+
+with right, st.container(border=True):
+    style.title("ประวัติการรัน", f"{len(runs)} รอบล่าสุด")
+    hist = pd.DataFrame({
+        "รอบ": runs["run_id"].str.slice(0, 32),
+        "เริ่ม": pd.to_datetime(runs["started_at"]).dt.tz_convert("Asia/Bangkok").dt.strftime("%d/%m %H:%M"),
+        "สถานะ": runs["status"].map(lambda x: STATUS.get(x, ("", x))[1]),
+        "แหล่งที่ล้ม": runs["sources_failed"].replace("", "-").fillna("-"),
+        "โหลด": runs["rows_loaded"].fillna(0).astype(int).map("{:,}".format),
+    })
+    st.markdown(style.table(hist, num=("โหลด",), muted=("เริ่ม", "แหล่งที่ล้ม")), unsafe_allow_html=True)
+
+with st.container(border=True):
+    bad, _ = safe_query("SELECT DISTINCT ON (source, academic_year, source_record_id) source, academic_year, "
+                        "source_record_id, reason FROM dq_quarantine ORDER BY source, academic_year, source_record_id, id DESC")
+    style.title("แถวที่ไม่ผ่านการตรวจคุณภาพ", f"{len(bad):,} รายการ (ไม่นับซ้ำ) · ถูกแยกไปตาราง dq_quarantine ไม่นำมาคำนวณ")
+    if bad.empty:
+        st.success("ไม่มีแถวที่ถูกกักไว้")
+    else:
+        show = pd.DataFrame({"แหล่ง": bad["source"], "ปี": bad["academic_year"].astype(str),
+                             "รายการ": bad["source_record_id"].str.replace("|", " · ", regex=False).str.slice(0, 90),
+                             "เหตุผล": bad["reason"]})
+        st.markdown(style.table(show, muted=("แหล่ง", "ปี")), unsafe_allow_html=True)
 
 with st.expander("สถานะ task ในรอบล่าสุด"):
     states = details.get("task_states") or {}
-    st.dataframe(pd.DataFrame(sorted(states.items()), columns=["task", "state"]), hide_index=True,
-                 use_container_width=True)
-
-st.subheader("แถวที่ไม่ผ่านการตรวจคุณภาพ (ล่าสุด 200 แถว)")
-bad, _ = safe_query("SELECT created_at, source, academic_year, source_record_id, reason FROM dq_quarantine "
-                    "ORDER BY id DESC LIMIT 200")
-if bad.empty:
-    st.success("ไม่มีแถวที่ถูกกักไว้")
-else:
-    bad["academic_year"] = bad["academic_year"].astype(str)
-    st.dataframe(bad, hide_index=True, use_container_width=True)
+    st.markdown(style.table(pd.DataFrame(sorted(states.items()), columns=["task", "สถานะ"])), unsafe_allow_html=True)

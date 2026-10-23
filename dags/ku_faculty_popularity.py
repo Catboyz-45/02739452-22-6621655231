@@ -32,6 +32,15 @@ def _stage():
     return staging_dir(get_current_context()["run_id"])
 
 
+def _simulate_outage(source: str):
+    """ทดสอบกรณีแหล่งล่ม: ตั้ง Airflow Variable kupop_simulate_down เช่น "mhesi" หรือ "tcas,kuadm" """
+    from airflow.models import Variable
+
+    down = {s.strip() for s in Variable.get("kupop_simulate_down", default_var="").split(",") if s.strip()}
+    if source in down:
+        raise AirflowException(f"จำลองแหล่ง {source} ล่ม (Variable kupop_simulate_down)")
+
+
 def _read(path):
     return pd.read_csv(path, dtype=TEXT_DTYPES, keep_default_na=False, na_values=[""])
 
@@ -58,18 +67,21 @@ def ku_faculty_popularity():
     def extract_group():
         @task
         def extract_tcas():
+            _simulate_outage("tcas")
             df = ex.extract_tcas()
             df.to_csv(_stage() / "tcas.csv", index=False)
             return len(df)
 
         @task
         def extract_mhesi():
+            _simulate_outage("mhesi")
             df = ex.extract_mhesi()
             df.to_csv(_stage() / "mhesi.csv", index=False)
             return len(df)
 
         @task
         def list_kuadm_projects():
+            _simulate_outage("kuadm")
             return ex.list_kuadm_projects()
 
         @task(retries=2, max_active_tis_per_dag=3)

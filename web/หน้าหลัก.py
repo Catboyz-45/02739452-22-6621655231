@@ -66,11 +66,16 @@ def year_frame(df_tcas: pd.DataFrame, df_names: pd.DataFrame, year: int) -> pd.D
     return df
 
 
-# ---------------------------------------------------------------- ส่วนหัว + ตัวกรอง (แถวเดียวด้านบน)
-FILTER_KEYS = ["f_year", "f_campus", "f_fac", "f_level", "f_score", "f_q"]
+# ---------------------------------------------------------------- ส่วนหัว + เมนู + ตัวกรอง (ตามดีไซน์)
+if "nav_target" in st.session_state:
+    st.session_state["nav_main"] = st.session_state.pop("nav_target")
+st.session_state.setdefault("nav_main", "ภาพรวม")
+page = style.header("nav_main")
+if page == "สถานะ Pipeline":
+    st.switch_page("pages/1_สถานะ_Pipeline.py")
 
-
-DEFAULTS = {"f_year": years[0], "f_campus": [], "f_fac": [], "f_level": [], "f_score": (0, 100), "f_q": ""}
+ALL_CAMPUS, ALL_FAC, ALL_LEVEL = "ทุกวิทยาเขต", "ทุกคณะ", "ทุกระดับ"
+DEFAULTS = {"f_year": years[0], "f_campus": ALL_CAMPUS, "f_fac": ALL_FAC, "f_level": ALL_LEVEL, "f_q": ""}
 for _k, _v in DEFAULTS.items():
     st.session_state.setdefault(_k, _v)
 
@@ -82,39 +87,33 @@ def reset_filters():
 
 updated = pd.to_datetime(last_run["finished_at"].iloc[0]).tz_convert("Asia/Bangkok").strftime("%d/%m/%Y %H:%M") \
     if not last_run.empty else "-"
-style.topbar("เรียนอะไรดีที่ ม.เกษตรศาสตร์?", "ความนิยม การแข่งขัน และคะแนนเข้า ระดับปริญญาตรี ทุกวิทยาเขต",
-             f"ที่มา: ทปอ. TCAS รอบ 3 ปี 2567–2569 · สป.อว. นักศึกษาใหม่ 2567<br>admission.ku.ac.th ที่นั่ง TCAS70 · อัปเดต {updated}")
 
-with st.container(border=True):
-    f1, f2, f3, f4, f5 = st.columns([1.7, 1.1, 1.4, 1.2, 1.5], gap="small")
+with st.container(border=True, key="filters"):
+    f1, f2, f3, f4, f5, f6 = st.columns([1.45, 1.2, 1.25, 1.05, 1.65, 0.85], vertical_alignment="bottom")
     year = f1.radio("ปีการศึกษา", years, horizontal=True, key="f_year")
     base = year_frame(tcas, names, int(year))
-    campus = f2.multiselect("วิทยาเขต", sorted(base["campus"].dropna().unique()), key="f_campus",
-                            placeholder="ทุกวิทยาเขต")
-    fac_pool = base[base["campus"].isin(campus)] if campus else base
-    faculty = f3.multiselect("คณะ", sorted(fac_pool["faculty"].dropna().unique()), key="f_fac", placeholder="ทุกคณะ")
-    level = f4.multiselect("ระดับการแข่งขัน", LEVEL_NAMES, key="f_level", placeholder="ทุกระดับ",
-                           help="ผู้สมัครต่อ 1 ที่นั่ง: สูงมาก ≥ 20 · สูง 10–20 · ปานกลาง 5–10 · ไม่สูง < 5")
+    campus = f2.selectbox("วิทยาเขต", [ALL_CAMPUS] + sorted(base["campus"].dropna().unique()), key="f_campus")
+    fac_pool = base if campus == ALL_CAMPUS else base[base["campus"] == campus]
+    fac_opts = [ALL_FAC] + sorted(fac_pool["faculty"].dropna().unique())
+    if st.session_state.get("f_fac") not in fac_opts:
+        st.session_state["f_fac"] = ALL_FAC
+    faculty = f3.selectbox("คณะ", fac_opts, key="f_fac")
+    level = f4.selectbox("ระดับการแข่งขัน", [ALL_LEVEL] + LEVEL_NAMES, key="f_level")
     q = f5.text_input("ค้นหาหลักสูตร", key="f_q", placeholder="เช่น คอมพิวเตอร์ บัญชี สัตวแพทย์")
-    g1, g2 = st.columns([4, 1.2])
-    score = g1.slider("ช่วงคะแนนต่ำสุดที่ใช้เข้า", 0, 100, key="f_score")
-    g2.write("")
-    g2.button("ล้างตัวกรอง", on_click=reset_filters, use_container_width=True)
+    f6.button("ล้างตัวกรอง", on_click=reset_filters, use_container_width=True, key="clear")
 
 view = base.copy()
-if campus:
-    view = view[view["campus"].isin(campus)]
-if faculty:
-    view = view[view["faculty"].isin(faculty)]
-if level:
-    view = view[view["level"].isin(level)]
-if score != (0, 100):
-    view = view[view["min_score"].between(*score)]
+if campus != ALL_CAMPUS:
+    view = view[view["campus"] == campus]
+if faculty != ALL_FAC:
+    view = view[view["faculty"] == faculty]
+if level != ALL_LEVEL:
+    view = view[view["level"] == level]
 if q:
     view = view[view["program_name"].fillna("").str.contains(q.strip(), case=False)]
 
 if view.empty:
-    st.warning("ไม่พบหลักสูตรที่ตรงกับตัวกรอง ลองล้างตัวกรองบางตัวดูครับ")
+    st.warning("ไม่พบหลักสูตรที่ตรงกับตัวกรอง ลองกด \"ล้างตัวกรอง\" ดูครับ")
     st.stop()
 
 k1, k2, k3, k4 = st.columns(4)
@@ -149,13 +148,15 @@ TIP = [alt.Tooltip("name:N", title="หลักสูตร"), alt.Tooltip("fac
        alt.Tooltip("seats:Q", title="ที่นั่ง", format=","), alt.Tooltip("ratio:Q", title="ผู้สมัคร/ที่นั่ง", format=".1f"),
        alt.Tooltip("min_score:Q", title="คะแนนต่ำสุด", format=".2f")]
 
-tab1, tab2, tab3, tab4 = st.tabs(["ภาพรวม", "เปรียบเทียบคณะ", "หาหลักสูตรที่ใช่", "ตารางข้อมูล"])
+
 
 # ---------------------------------------------------------------- แท็บ 1: ภาพรวม
-with tab1:
+if page == "ภาพรวม":
     left, right = st.columns([2, 1], gap="medium")
     with left, st.container(border=True):
-        rank_by = st.radio("จัดอันดับตาม", ["คนสมัครมาก", "แข่งขันสูง", "คะแนนสูง", "โอกาสติดสูง"], horizontal=True)
+        hc1, hc2 = st.columns([0.85, 1.3], vertical_alignment="center")
+        rank_by = hc2.radio("จัดอันดับตาม", ["คนสมัครมาก", "แข่งขันสูง", "คะแนนสูง", "โอกาสติดสูง"], horizontal=True,
+                            label_visibility="collapsed", key="rank_by")
         col, asc, unit, fmt, color = {
             "คนสมัครมาก": ("applicants", False, "คนสมัคร", "{:,.0f}", style.BLUE),
             "แข่งขันสูง": ("ratio", False, "ผู้สมัครต่อ 1 ที่นั่ง", "1 : {:.1f}", style.BLUE),
@@ -164,7 +165,8 @@ with tab1:
         }[rank_by]
         top_n = 10
         top = view.dropna(subset=[col]).sort_values(col, ascending=asc).head(top_n)
-        st.markdown(f"#### {len(top)} อันดับหลักสูตร — {rank_by}")
+        hc1.markdown(f"#### {len(top)} อันดับหลักสูตร" + {"คนสมัครมาก": "ที่คนสมัครมากที่สุด", "แข่งขันสูง": "ที่แข่งขันสูงที่สุด",
+                     "คะแนนสูง": "ที่ใช้คะแนนสูงที่สุด", "โอกาสติดสูง": "ที่มีโอกาสติดสูงที่สุด"}[rank_by])
         mx = float(top[col].max() or 1)
         rows = "".join(
             f'<div class="rank" title="{r.program_name} · {r.faculty} · ผู้สมัคร {r.applicants:,.0f} · ที่นั่ง {r.seats:,.0f}">'
@@ -173,8 +175,7 @@ with tab1:
             f'<span class="v">{fmt.format(r[col])}</span></div>'
             for i, (_, r) in enumerate(top.iterrows(), start=1))
         st.markdown(rows, unsafe_allow_html=True)
-        st.markdown(f'<div class="howto">หน่วย: {unit} · วางเมาส์บนแถวเพื่อดูคณะ จำนวนผู้สมัคร และที่นั่ง</div>',
-                    unsafe_allow_html=True)
+
     with right, st.container(border=True):
         st.markdown("#### ระดับการแข่งขัน")
         lv = view.dropna(subset=["level"]).groupby("level")["label"].count()
@@ -191,8 +192,25 @@ with tab1:
                     '<div class="note">อ่านค่า: 1 : 20 แปลว่า 1 ที่นั่งมีคนสมัคร 20 คน ยิ่งตัวเลขมาก ยิ่งแข่งขันสูง</div>',
                     unsafe_allow_html=True)
 
+    with st.container(border=True):
+        fa, fb = st.columns([1, 1.6], gap="large")
+        with fa:
+            st.markdown("#### คะแนนของฉันพอเข้าที่ไหนได้บ้าง?")
+            my0 = st.number_input("คะแนนรวมของฉัน (เต็ม 100)", 0.0, 100.0, 60.0, 0.5, key="my_score")
+            fit0 = view.dropna(subset=["min_score"])
+            fit0 = fit0[fit0["min_score"] <= my0].sort_values("min_score", ascending=False)
+            st.markdown(f"มี **{len(fit0):,}** หลักสูตรที่คะแนนต่ำสุดปี {year} ไม่เกิน {my0:g} คะแนน")
+            st.markdown('<div class="howto">แต่ละหลักสูตรใช้วิชาและสัดส่วนคะแนนต่างกัน ใช้เป็นแนวทางเบื้องต้นเท่านั้น</div>',
+                        unsafe_allow_html=True)
+        with fb:
+            show0 = pd.DataFrame({"หลักสูตร": fit0["name"], "วิทยาเขต": fit0["campus"],
+                                  "คะแนนต่ำสุด": fit0["min_score"].map("{:.2f}".format),
+                                  "เผื่อ": (my0 - fit0["min_score"]).map("+{:.2f}".format)}).head(6)
+            st.markdown(style.table(show0, num=("คะแนนต่ำสุด", "เผื่อ"), muted=("วิทยาเขต",), pos=("เผื่อ",),
+                                    bold=("คะแนนต่ำสุด",)), unsafe_allow_html=True)
+
 # ---------------------------------------------------------------- แท็บ 2: เปรียบเทียบคณะ
-with tab2:
+if page == "เปรียบเทียบคณะ":
     with st.container(border=True):
         metric = st.radio("เปรียบเทียบด้วย", ["ผู้สมัคร", "ที่นั่ง", "อัตราการแข่งขัน", "คะแนนต่ำสุดเฉลี่ย"],
                           horizontal=True, key="m_fac")
@@ -254,7 +272,7 @@ with tab2:
                     unsafe_allow_html=True)
 
 # ---------------------------------------------------------------- แท็บ 3: หาหลักสูตรที่ใช่
-with tab3:
+if page == "หาหลักสูตรที่ใช่":
     with st.container(border=True):
         a, b = st.columns([1, 1.7], gap="large")
         with a:
@@ -326,7 +344,8 @@ with tab3:
                                         num=("ที่นั่ง",), bold=("ที่นั่ง",)), unsafe_allow_html=True)
 
 # ---------------------------------------------------------------- แท็บ 4: ตาราง
-with tab4, st.container(border=True):
+if page == "ตารางข้อมูล":
+  with st.container(border=True):
     style.title("ตารางหลักสูตรทั้งหมด", f"{len(view):,} หลักสูตรตามตัวกรอง · ปี {year} · คลิกหัวคอลัมน์เพื่อเรียงลำดับ")
     table = view.sort_values("applicants", ascending=False)[
         ["name", "faculty", "campus", "applicants", "seats", "ratio", "level", "min_score", "max_score",
@@ -342,12 +361,5 @@ with tab4, st.container(border=True):
     })
     st.download_button("ดาวน์โหลดตารางนี้ (CSV)", table.to_csv(index=False).encode("utf-8-sig"), f"ku_programs_{year}.csv")
 
-with st.expander("คำอธิบายคำศัพท์และที่มาของข้อมูล"):
-    st.markdown("""
-- **ผู้สมัคร / ที่นั่ง** — สถิติ TCAS รอบ 3 (Admission) จาก ทปอ. นับรายการสมัคร (1 คนเลือกได้หลายอันดับ)
-- **อัตราการแข่งขัน** — ผู้สมัครหารด้วยที่นั่ง เช่น 1 : 20 แปลว่า 1 ที่นั่งมีคนสมัคร 20 คน
-- **คะแนนต่ำสุด / สูงสุด** — คะแนนของผู้ผ่านการคัดเลือกในรอบ 3 (เต็ม 100) แต่ละหลักสูตรใช้วิชาต่างกัน
-- **เข้าใหม่ 2567** — นักศึกษาใหม่ทุกรอบจากข้อมูลเปิดของ สป.อว.
-- **ที่นั่ง TCAS70** — จำนวนรับที่ประกาศบน admission.ku.ac.th (รวมทุกโครงการที่ประกาศแล้ว)
-- หลักสูตรเดียวกันจากหลายแหล่งถูกรวมเป็นแถวเดียว (จับคู่ด้วยวิทยาเขต + ชื่อสาขา)
-""")
+st.markdown(f'<footer class="foot"><span>ที่มา: ทปอ. สถิติ TCAS รอบ 3 ปี 2567–2569 · สป.อว. นักศึกษาใหม่ 2567 · '
+            f'admission.ku.ac.th ที่นั่ง TCAS70</span><span>อัปเดตล่าสุด {updated}</span></footer>', unsafe_allow_html=True)

@@ -9,9 +9,20 @@ from db import safe_query
 st.set_page_config(page_title="สถานะ Pipeline", page_icon="🛠️", layout="wide", initial_sidebar_state="collapsed")
 style.apply()
 
+def _go_main():
+    if st.session_state["nav_status"] != "สถานะ Pipeline":
+        st.session_state["nav_target"] = st.session_state["nav_status"]
+
+
+if "nav_target" in st.session_state:
+    st.switch_page("หน้าหลัก.py")
+st.session_state["nav_status"] = "สถานะ Pipeline"
+style.header("nav_status", on_change=_go_main)
+
 runs, err = safe_query("SELECT * FROM pipeline_runs ORDER BY started_at DESC LIMIT 30")
-style.topbar("สถานะ Pipeline", "ผลการรัน DAG ku_faculty_popularity สถานะของแต่ละแหล่งข้อมูล และแถวที่ไม่ผ่านการตรวจคุณภาพ",
-             "Airflow: http://localhost:8080")
+st.markdown("#### สถานะ Pipeline")
+st.markdown('<div class="sub">ผลการรัน DAG ku_faculty_popularity ใน Airflow (http://localhost:8080) สถานะของแต่ละแหล่งข้อมูล '
+            'และแถวที่ไม่ผ่านการตรวจคุณภาพ</div>', unsafe_allow_html=True)
 if err or runs.empty:
     st.info("ยังไม่มีประวัติการรัน DAG")
     st.stop()

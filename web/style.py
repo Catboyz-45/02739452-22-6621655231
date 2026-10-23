@@ -80,6 +80,42 @@ div[role="radiogroup"] > label:has(input:checked) p { color: #00704a; font-weigh
 .yr { display: grid; grid-template-columns: 44px minmax(0, 1fr) 64px; gap: 10px; align-items: center; margin: 8px 0; font-size: .88rem; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; }
 .sub { color: #5d665f; font-size: .85rem; margin: -4px 0 10px; }
+/* ===== ให้ตรงกับดีไซน์ Claude Design ===== */
+[data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] { display: none !important; }
+.block-container { padding-top: 0 !important; }
+.main h4, [data-testid="stMarkdownContainer"] h4 { font-size: 18px !important; margin: 0 0 4px; }
+[data-testid="stWidgetLabel"] p { font-size: 12px !important; color: #5d665f !important; }
+.st-key-hdr { background: #fff; border-bottom: 1px solid #e3e6df; width: 100vw; position: relative; left: 50%;
+  margin-left: -50vw; padding: 12px max(24px, calc((100vw - 1240px) / 2 + 24px)); margin-bottom: 6px; }
+.st-key-hdr .brand { display: flex; align-items: center; gap: 12px; }
+.st-key-hdr .t { font-size: 18px; font-weight: 700; line-height: 1.2; color: #1c2420; }
+.st-key-hdr .s { font-size: 13px; color: #5d665f; }
+.st-key-hdr div[role="radiogroup"] { background: #eef1ec; padding: 4px; border-radius: 12px; gap: 6px !important;
+  width: fit-content; margin-left: auto; flex-wrap: wrap; }
+.st-key-hdr div[role="radiogroup"] > label { border: 0 !important; background: transparent; padding: 8px 16px !important; border-radius: 9px; }
+.st-key-hdr div[role="radiogroup"] > label p { font-size: 14px !important; color: #4a524c !important; }
+.st-key-hdr div[role="radiogroup"] > label:has(input:checked) { background: #fff !important; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.st-key-hdr div[role="radiogroup"] > label:has(input:checked) p { color: #00704a !important; font-weight: 600; }
+.st-key-f_year div[role="radiogroup"] { background: #eef1ec; padding: 3px; border-radius: 10px; gap: 4px !important; width: fit-content; }
+.st-key-f_year div[role="radiogroup"] > label { border: 0 !important; background: transparent; padding: 6px 12px !important; border-radius: 8px; }
+.st-key-f_year div[role="radiogroup"] > label p { font-size: 14px !important; color: #1c2420; }
+.st-key-f_year div[role="radiogroup"] > label:has(input:checked) { background: #00704a !important; }
+.st-key-f_year div[role="radiogroup"] > label:has(input:checked) p { color: #fff !important; font-weight: 600; }
+.st-key-rank_by div[role="radiogroup"] { justify-content: flex-end; flex-wrap: nowrap !important; }
+.st-key-f_year div[role="radiogroup"] { flex-wrap: nowrap !important; }
+div[role="radiogroup"] > label { flex-shrink: 0; }
+div[role="radiogroup"] > label p { white-space: nowrap; }
+.block-container > div[data-testid="stVerticalBlockBorderWrapper"] { background: transparent !important; border: 0 !important; }
+.st-key-rank_by div[role="radiogroup"] > label, .st-key-m_fac div[role="radiogroup"] > label { padding: 5px 12px !important; }
+.st-key-rank_by div[role="radiogroup"] > label p, .st-key-m_fac div[role="radiogroup"] > label p { font-size: 13px !important; color: #4a524c; }
+[data-baseweb="select"] > div, [data-baseweb="input"], [data-baseweb="base-input"] { background: #fff !important;
+  border-color: #d7dcd4 !important; border-radius: 10px !important; }
+.st-key-clear button { border: 1px solid #d7dcd4 !important; border-radius: 10px !important; color: #00704a !important;
+  background: #fff !important; font-weight: 600; min-height: 40px; }
+.st-key-clear button p { font-weight: 600; font-size: 14px; }
+.st-key-my_score { max-width: 180px; }
+.st-key-my_score input { font-size: 22px !important; font-weight: 700; }
+.foot { font-size: 12px; color: #6b736d; display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; }
 </style>
 """
 
@@ -132,3 +168,16 @@ def title(text, sub=None):
     st.markdown(f"#### {text}")
     if sub:
         st.markdown(f'<div class="sub">{sub}</div>', unsafe_allow_html=True)
+
+
+NAV = ["ภาพรวม", "เปรียบเทียบคณะ", "หาหลักสูตรที่ใช่", "ตารางข้อมูล", "สถานะ Pipeline"]
+
+
+def header(key: str, on_change=None) -> str:
+    """แถบหัวสีขาวเต็มความกว้าง: โลโก้ + ชื่อ ด้านซ้าย เมนูแบบ segmented ด้านขวา (ตามดีไซน์)"""
+    with st.container(key="hdr"):
+        c1, c2 = st.columns([1, 1.35], vertical_alignment="center")
+        c1.markdown(f'<div class="brand"><div class="logo">{LOGO}</div><div><div class="t">เรียนอะไรดีที่ ม.เกษตรศาสตร์?</div>'
+                    '<div class="s">ความนิยม การแข่งขัน และคะแนนเข้า ระดับปริญญาตรี ทุกวิทยาเขต</div></div></div>',
+                    unsafe_allow_html=True)
+        return c2.radio("เมนูหลัก", NAV, horizontal=True, label_visibility="collapsed", key=key, on_change=on_change)

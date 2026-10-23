@@ -83,6 +83,7 @@ div[role="radiogroup"] > label:has(input:checked) p { color: #00704a; font-weigh
 /* ===== ให้ตรงกับดีไซน์ Claude Design ===== */
 [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] { display: none !important; }
 .block-container { padding-top: 0 !important; }
+[data-testid="stMain"] { overflow-x: hidden !important; overflow-y: auto !important; }
 .main h4, [data-testid="stMarkdownContainer"] h4 { font-size: 18px !important; margin: 0 0 4px; }
 [data-testid="stWidgetLabel"] p { font-size: 12px !important; color: #5d665f !important; }
 .st-key-hdr { background: #fff; border-bottom: 1px solid #e3e6df; width: 100vw; position: relative; left: 50%;

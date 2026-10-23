@@ -52,4 +52,5 @@ bad, _ = safe_query("SELECT created_at, source, academic_year, source_record_id,
 if bad.empty:
     st.success("ไม่มีแถวที่ถูกกักไว้")
 else:
+    bad["academic_year"] = bad["academic_year"].astype(str)
     st.dataframe(bad, hide_index=True, use_container_width=True)

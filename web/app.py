@@ -126,5 +126,6 @@ table = view[["campus", "faculty", "program_name", "sources", "latest_tcas_year"
     "competition_ratio": "อัตราแข่งขัน", "min_score": "คะแนนต่ำสุด", "max_score": "คะแนนสูงสุด",
     "enrolled_2567": "เข้าใหม่ 2567", "seats_2570": "ที่นั่ง TCAS70",
 }).sort_values("ผู้สมัคร", ascending=False)
+table["ปี TCAS"] = table["ปี TCAS"].map(lambda v: "" if pd.isna(v) else str(int(v)))
 st.dataframe(table, use_container_width=True, hide_index=True)
 st.download_button("ดาวน์โหลด CSV", table.to_csv(index=False).encode("utf-8-sig"), "ku_program_summary.csv")

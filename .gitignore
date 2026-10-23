@@ -7,3 +7,4 @@ logs/*
 data/*
 !data/.gitkeep
 .venv/
+.playwright-mcp/

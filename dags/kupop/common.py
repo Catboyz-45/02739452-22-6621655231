@@ -80,11 +80,17 @@ def major_key(name) -> str:
     'วิทยาการคอมพิวเตอร์'                              -> 'วิทยาการคอมพิวเตอร์'
     """
     text = norm_space(name)
-    text = re.sub(r"\(.*?\)", "", text)
     if "สาขาวิชา" in text:
-        text = text.split("สาขาวิชา", 1)[1]
+        text = re.sub(r"\(.*?\)", "", text.split("สาขาวิชา", 1)[1])
+    else:
+        # หลักสูตรที่ไม่มีคำว่า "สาขาวิชา" เช่น 'น.บ.(นิติศาสตรบัณฑิต)' ใช้ชื่อปริญญาในวงเล็บแทน
+        inner = [p for p in re.findall(r"\((.*?)\)", text)
+                 if not re.search(r"ภาษา|ปกติ|พิเศษ|นานาชาติ|โครงการ", p)]
+        text = inner[0] if inner else re.sub(r"\(.*?\)", "", text)
+        text = re.sub(r"บัณฑิต\s*$", "", text.strip())
     text = re.sub(r"^วิชาเอก", "", text)
-    text = re.sub(r"[\s\-–.,/]", "", text)
+    # ตัดช่องว่าง/เครื่องหมาย และไม้ทัณฑฆาต ('นิติศาสตร' กับ 'นิติศาสตร์' ให้เป็นคีย์เดียวกัน)
+    text = re.sub(r"[\s\-–.,/์]", "", text)
     return text.lower()
 
 

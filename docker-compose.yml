@@ -1,0 +1,126 @@
+# ระบบรวบรวมข้อมูลความนิยมคณะ ม.เกษตรศาสตร์ (02739452 Final, ลำดับที่ 22)
+# บริการ:
+#   airflow-db        Postgres เก็บ metadata ของ Airflow
+#   target-db         Postgres ปลายทางเก็บข้อมูลที่รวมแล้ว (host port ${TARGET_DB_PORT})
+#   airflow-init      migrate DB + สร้างผู้ใช้ admin (รันครั้งเดียวแล้วจบ)
+#   airflow-webserver http://localhost:8080
+#   airflow-scheduler รัน DAG (LocalExecutor)
+#   web               Streamlit dashboard http://localhost:8501 อ่านจาก target-db โดยตรง
+
+x-airflow-common: &airflow-common
+  build: .
+  image: kupop-airflow:2.10.4
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@airflow-db/airflow
+    AIRFLOW__CORE__FERNET_KEY: ""
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: "30"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
+    AIRFLOW_CONN_KUPOP_DB: postgresql://${TARGET_DB_USER}:${TARGET_DB_PASSWORD}@target-db:5432/${TARGET_DB_NAME}
+    KUPOP_DATA_DIR: /opt/airflow/data
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./data:/opt/airflow/data
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on: &airflow-depends
+    airflow-db:
+      condition: service_healthy
+    target-db:
+      condition: service_healthy
+
+services:
+  airflow-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${AIRFLOW_DB_USER}
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${AIRFLOW_DB_USER}"]
+      interval: 5s
+      retries: 10
+    restart: always
+
+  target-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${TARGET_DB_USER}
+      POSTGRES_PASSWORD: ${TARGET_DB_PASSWORD}
+      POSTGRES_DB: ${TARGET_DB_NAME}
+    ports:
+      - "${TARGET_DB_PORT:-5434}:5432"
+    volumes:
+      - target-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${TARGET_DB_USER}", "-d", "${TARGET_DB_NAME}"]
+      interval: 5s
+      retries: 10
+    restart: always
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /opt/airflow/logs /opt/airflow/data
+        chown -R "${AIRFLOW_UID:-50000}:0" /opt/airflow/logs /opt/airflow/data
+        exec /entrypoint airflow version
+    environment:
+      <<: *airflow-env
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
+    user: "0:0"
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    restart: always
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+
+  web:
+    build: ./web
+    image: kupop-web:latest
+    environment:
+      TARGET_DB_HOST: target-db
+      TARGET_DB_PORT: "5432"
+      TARGET_DB_NAME: ${TARGET_DB_NAME}
+      TARGET_DB_USER: ${TARGET_DB_USER}
+      TARGET_DB_PASSWORD: ${TARGET_DB_PASSWORD}
+    ports:
+      - "8501:8501"
+    depends_on:
+      target-db:
+        condition: service_healthy
+    restart: always
+
+volumes:
+  airflow-db-data:
+  target-db-data:

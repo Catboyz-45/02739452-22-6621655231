@@ -1,0 +1,9 @@
+# Package ที่ DAG ใช้ (ติดตั้งลงใน image Airflow ผ่าน Dockerfile)
+# version ถูกล็อกด้วย constraints ของ Airflow 2.10.4 เพื่อไม่ให้ชนกับ Airflow
+apache-airflow-providers-postgres
+pandas
+openpyxl
+requests
+beautifulsoup4
+lxml
+psycopg2-binary

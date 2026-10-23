@@ -40,7 +40,7 @@ GitHub: <b>https://github.com/Catboyz-45/02739452-22-6621655231</b> (public) · 
 </table>
 <ul>
 <li><b>ระดับ 1:</b> DAG extract → transform → load ลง PostgreSQL และ dashboard (Streamlit) อ่านจาก PostgreSQL โดยตรง แสดงตาราง + กราฟ</li>
-<li><b>ระดับ 2:</b> 3 แหล่งรันขนานกันใน TaskGroup <code>extract</code> แปลงเป็น schema เดียว (<code>admission_stats</code>) ใช้ <b>UPSERT</b> คีย์ (source, academic_year, source_record_id) — trigger ซ้ำแล้วยังได้ 1,917 แถวเท่าเดิม · dashboard มี KPI 5 ตัว + ตัวกรองวิทยาเขต/คณะ/ชื่อหลักสูตร/จำนวนแหล่ง</li>
+<li><b>ระดับ 2:</b> 3 แหล่งรันขนานกันใน TaskGroup <code>extract</code> แปลงเป็น schema เดียว (<code>admission_stats</code>) ใช้ <b>UPSERT</b> คีย์ (source, academic_year, source_record_id) — trigger ซ้ำแล้วยังได้ 1,917 แถวเท่าเดิม · dashboard มี KPI 4 ตัว + ตัวกรอง 6 แบบ (ปี, วิทยาเขต, คณะ, ระดับการแข่งขัน, ช่วงคะแนน, ค้นหาชื่อ)</li>
 <li><b>ระดับ 3:</b> <code>merge_and_transform</code> ใช้ <code>trigger_rule=all_done</code> แหล่งไหนล่มก็รวมจากแหล่งที่เหลือ (ทดสอบจริงด้วย Variable <code>kupop_simulate_down=mhesi</code> ได้สถานะ partial โหลด 1,735 แถว) ·
 <b>ตัดซ้ำข้ามแหล่ง</b>: จับคู่หลักสูตรด้วย วิทยาเขต + <code>major_key</code> รวม 1,917 แถว เหลือ <b>264 หลักสูตร</b> (พบ ≥2 แหล่ง 214, ครบ 3 แหล่ง 136) ·
 <b>ตรวจคุณภาพ</b> แล้วแยกเส้นทางด้วย Branch: ผ่านทั้งหมด → load, มีแถวเสีย → <code>quarantine_bad_rows</code> แล้ว load, ข้อมูล &lt;100 แถว → <code>alert_insufficient_data</code> ไม่โหลดทับข้อมูลเดิม</li>
@@ -53,7 +53,7 @@ GitHub: <b>https://github.com/Catboyz-45/02739452-22-6621655231</b> (public) · 
 <div><img src="img/grid.png"><div class="cap">ภาพที่ 2 Grid view — รอบ <code>demo_source_outage_mhesi</code> จำลองแหล่ง อว. ล่ม: extract_mhesi สีแดง แต่ task ถัดไปยังรันต่อ และโหลดจาก 2 แหล่งที่เหลือ</div></div>
 <div><div style="height:262px;overflow:hidden"><img src="img/status.png"></div><div class="cap">ภาพที่ 3 หน้าสถานะ Pipeline (โบนัส): สถานะแต่ละแหล่ง, ผลตัดซ้ำ, ประวัติการรัน (มีรอบ partial)</div></div>
 </div>
-<div class="fig"><div style="height:640px;overflow:hidden"><img src="img/dashboard.png"></div><div class="cap">ภาพที่ 4 Dashboard (Streamlit อ่านจาก PostgreSQL): KPI 5 ตัว, ตัวกรองด้านซ้าย, Top 15 อัตราการแข่งขัน, ผู้สมัครแยกคณะ 3 ปี (ด้านล่างยังมีกราฟแนวโน้มคะแนนต่ำสุด, ผู้สมัคร vs เข้าเรียนจริง และตารางหลักสูตร)</div></div>
+<div class="fig"><div style="height:500px;overflow:hidden"><img src="img/dash_overview.png"></div><div class="cap">ภาพที่ 4 Dashboard (Streamlit อ่านจาก PostgreSQL โดยตรง): ตัวกรอง 6 แบบด้านซ้าย (ปี, วิทยาเขต, คณะ, ระดับการแข่งขัน, ช่วงคะแนน, ค้นหา) · KPI 4 ตัว · 4 แท็บ: ภาพรวม (จัดอันดับได้ 4 แบบ + ระดับการแข่งขัน), เปรียบเทียบคณะ (แนวโน้ม 3 ปี, สมัคร vs เข้าเรียนจริง), หาหลักสูตรที่ใช่ (ใส่คะแนนของตัวเองแล้วดูว่าเข้าหลักสูตรไหนได้ + รายละเอียดรายหลักสูตร), ตารางข้อมูล + ดาวน์โหลด CSV</div></div>
 
 <h2 class="page-break">2. ปัญหาที่พบและวิธีแก้</h2>
 <table>

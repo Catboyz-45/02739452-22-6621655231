@@ -3,10 +3,13 @@ import json
 import pandas as pd
 import streamlit as st
 
+import style
 from db import safe_query
 
 st.set_page_config(page_title="สถานะ Pipeline", page_icon="🛠️", layout="wide")
-st.title("สถานะ Pipeline")
+style.apply()
+st.markdown('<div class="hero"><h1>🛠️ สถานะ Pipeline</h1><p>ผลการรัน DAG <code style="color:#fff;background:transparent">ku_faculty_popularity</code> '
+            'ล่าสุด สถานะของแต่ละแหล่งข้อมูล และแถวที่ไม่ผ่านการตรวจคุณภาพ</p></div>', unsafe_allow_html=True)
 
 runs, err = safe_query("SELECT * FROM pipeline_runs ORDER BY started_at DESC LIMIT 30")
 if err or runs.empty:
